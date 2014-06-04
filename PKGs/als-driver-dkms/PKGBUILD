@@ -1,0 +1,45 @@
+# Mainteiner: dieghen89 <dieghen89 at gmail dot com>
+
+pkgname="als-dmks-git"
+_pkgbase=als
+pkgver=18.4215a25
+pkgrel=1
+pkgdesc="Ambient Light Sensor - dkms module"
+arch=('i686' 'x86_64')
+license=('custom')
+depends=('dkms' 'linux-headers')
+install=als-dkms-git.install
+source=("${pkgname}::git+https://github.com/victorenator/als.git"
+        "http://xps13-9333.appspot.com/root/0001-Add-support-for-light-temperature-color-chromaticity.patch"
+        "dkms.conf")
+sha256sums=('SKIP'
+            '016cca0285ccac3ce0d88a5703d8dd549e2488c24b27193a5a191539d28cc8c4'
+            '0e593ec9114f824f56cec2274de484b85a433cbe2761d09e2e14f28f407d3a0e')
+
+pkgver() {
+	cd ${srcdir}/${pkgname}/
+	echo $(git rev-list --count master).$(git rev-parse --short master)
+}
+
+prepare()
+{
+	cd "${srcdir}/${pkgname}/"
+	#patch -Np1 -i ../0001-Add-support-for-light-temperature-color-chromaticity.patch
+}
+
+package()
+{
+	cd ${srcdir}/${pkgname}/
+
+	# Copy source
+	install -m644 -d "${pkgdir}/usr/src/${_pkgbase}-${pkgver}/"
+	cp -r ${srcdir}/${pkgname}/* "${pkgdir}/usr/src/${_pkgbase}-${pkgver}/"
+
+	# Copy dkms.conf
+	install -Dm644 ${srcdir}/dkms.conf "${pkgdir}/usr/src/${_pkgbase}-${pkgver}/dkms.conf"
+
+	# Set name and version
+	sed	-e "s/@_PKGBASE@/${_pkgbase}/" \
+		-e "s/@PKGVER@/${pkgver}/" \
+		-i "${pkgdir}"/usr/src/${_pkgbase}-${pkgver}/dkms.conf
+}
