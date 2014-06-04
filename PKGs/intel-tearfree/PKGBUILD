@@ -1,0 +1,18 @@
+# Mainteiner: dieghen89 <dieghen89 at gmail dot com>
+
+pkgname="intel-tearfree"
+pkgver=1
+pkgrel=1
+pkgdesc="X11 configuration to enable TearFree option in the intel driver"
+arch=('i686' 'x86_64')
+license=('custom')
+depends=('xorg-server')
+backup=('etc/X11/xorg.conf.d/20-intel.conf')
+source=("20-intel.conf")
+sha256sums=('06781c6a651289f09ef5eb7c54cd3c739654d94d370f04d3ac3377a2bf6907b7')
+
+package()
+{
+  cd "${srcdir}/"
+  install -D -m644 20-intel.conf "${pkgdir}/etc/X11/xorg.conf.d/20-intel.conf"
+}
