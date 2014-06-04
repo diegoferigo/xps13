@@ -1,0 +1,19 @@
+# Mainteiner: dieghen89 <dieghen89 at gmail dot com>
+
+pkgname="xps13-powersave"
+pkgver=1
+pkgrel=1
+pkgdesc="Dynamic powersave script for xps13"
+arch=('i686' 'x86_64')
+license=('custom')
+source=("xps13-powersave.rules"
+        "xps13-powersave.sh")
+sha256sums=('7c199a74cdef480f2c725de719432ff93b1e54133235068e65d52ef536bfb516'
+            '1109bb336a41291edfabe12c041d78f26c7270b05236750852fcac10a8bed2e8')
+
+package()
+{
+  cd "${srcdir}/"
+  install -D -m644 xps13-powersave.rules "${pkgdir}/etc/udev/rules.d/91-xps13-powersave.rules"
+  install -D -m777 xps13-powersave.sh "${pkgdir}/usr/share/xps13-powersave/xps13-powersave.sh"
+}

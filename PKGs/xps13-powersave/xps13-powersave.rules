@@ -1,0 +1,2 @@
+SUBSYSTEM=="power_supply", ATTR{online}=="0", RUN+="/usr/share/xps13-powersave/xps13-powersave.sh unplugged"
+SUBSYSTEM=="power_supply", ATTR{online}=="1", RUN+="/usr/share/xps13-powersave/xps13-powersave.sh plugged"
