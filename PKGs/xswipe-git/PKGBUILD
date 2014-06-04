@@ -1,0 +1,41 @@
+# Mainteiner: dieghen89 <dieghen89 at gmail dot com>
+
+pkgname="xswipe-git"
+pkgver=r69.23d5755
+pkgrel=2
+pkgdesc="Multitouch gesture recognizer"
+arch=('i686' 'x86_64')
+license=('custom')
+url="https://github.com/iberianpig/xSwipe"
+depends=('perl' 'perl-x11-guitest' 'xf86-input-synaptics-xswipe-git')
+backup=('etc/conf.d/xswipe-eventKey.conf'
+        'etc/conf.d/xswipe.conf')
+install=xswipe.install
+source=("${pkgname}::git+https://github.com/iberianpig/xSwipe.git"
+        "xSwipe"
+        "xswipe.conf")
+sha256sums=('SKIP'
+            '2da24b29cb6663946a4a28914a1b40281baa36bedee46b8c730755e72f4251e2'
+            '877a987d413b3406fde62c8175df38b929f876f7a157de3ab75e59964e4b66a8')
+
+pkgver() {
+  cd "${srcdir}/${pkgname}"
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+  cd "${srcdir}/${pkgname}"
+  # Install files in /usr/lib
+  install -D -m644 eventKey.cfg "${pkgdir}/etc/conf.d/xswipe-eventKey.conf"
+  install -D -m644 nScroll/eventKey.cfg "${pkgdir}/usr/lib/xswipe/xswipe-eventKey-naturalscroll.conf"
+  install -D -m755 xSwipe.pl "${pkgdir}/usr/lib/xswipe/xSwipe.pl"
+  
+  cd "${srcdir}"
+  # Install the launching script
+  install -D -m755 xSwipe "${pkgdir}/usr/bin/xSwipe"
+  
+  # Install the configuration and key binding files
+  install -m755 -d "${pkgdir}/etc/conf.d"
+  install -m644 xswipe.conf "${pkgdir}/etc/conf.d/xswipe.conf"
+  ln -s "/etc/conf.d/xswipe-eventKey.conf" "${pkgdir}/usr/lib/xswipe/eventKey.cfg" 
+}

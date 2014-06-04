@@ -1,0 +1,4 @@
+#!/bin/bash
+. /etc/conf.d/xswipe.conf
+
+perl /usr/lib/xswipe/xSwipe.pl -d ${SENSITIVITY}
