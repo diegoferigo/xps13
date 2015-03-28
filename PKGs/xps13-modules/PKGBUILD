@@ -1,17 +1,22 @@
 # Mainteiner: dieghen89 <dieghen89 at gmail dot com>
 
 pkgname="xps13-modules"
-pkgver=1
+pkgver=2
 pkgrel=1
 pkgdesc="Load and blacklist modules for xps13"
 arch=('i686' 'x86_64')
 license=('custom')
-source=("20-intel.conf")
-sha256sums=('06781c6a651289f09ef5eb7c54cd3c739654d94d370f04d3ac3377a2bf6907b7')
+source=("i915.conf"
+        "suspendbug.conf"
+        "nobeep.conf")
+md5sums=('032488feeb5d3aa991dc7b65219aa123'
+         '91d745f599f52a6c5ce1846a702b11d2'
+         '3866086e6af5e3528a66eff492f2f4dd')
 
 package()
 {
   cd "${srcdir}/"
   install -D -m644 i915.conf "${pkgdir}/etc/modprobe.d/i915.conf"
-  install -D -m644 i2c_hid.conf "${pkgdir}/etc/modprobe.d/i2c_hid.conf"
+  install -D -m644 suspendbug.conf "${pkgdir}/etc/modprobe.d/suspendbug.conf"
+  install -D -m644 nobeep.conf "${pkgdir}/etc/modprobe.d/nobeep.conf"
 }
