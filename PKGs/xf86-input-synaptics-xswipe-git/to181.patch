@@ -1,0 +1,596 @@
+diff --git a/conf/50-synaptics.conf b/conf/50-synaptics.conf
+index aa50456..47ee3c8 100644
+--- a/conf/50-synaptics.conf
++++ b/conf/50-synaptics.conf
+@@ -14,7 +14,9 @@ Section "InputClass"
+ # This option is recommend on all Linux systems using evdev, but cannot be
+ # enabled by default. See the following link for details:
+ # http://who-t.blogspot.com/2010/11/how-to-ignore-configuration-errors.html
+-#       MatchDevicePath "/dev/input/event*"
++        MatchDevicePath "/dev/input/event*"
++        Option "Protocol" "event"
++        Option "SHMConfig" "on"
+ EndSection
+ 
+ Section "InputClass"
+diff --git a/include/Makefile.am b/include/Makefile.am
+index 8234020..f078e5e 100644
+--- a/include/Makefile.am
++++ b/include/Makefile.am
+@@ -18,4 +18,4 @@
+ #  IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ #  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ 
+-sdk_HEADERS = synaptics-properties.h
++sdk_HEADERS = synaptics.h synaptics-properties.h
+diff --git a/include/synaptics.h b/include/synaptics.h
+new file mode 100644
+index 0000000..a0020bb
+--- /dev/null
++++ b/include/synaptics.h
+@@ -0,0 +1,52 @@
++/*
++ * Permission to use, copy, modify, distribute, and sell this software
++ * and its documentation for any purpose is hereby granted without
++ * fee, provided that the above copyright notice appear in all copies
++ * and that both that copyright notice and this permission notice
++ * appear in supporting documentation, and that the name of Red Hat
++ * not be used in advertising or publicity pertaining to distribution
++ * of the software without specific, written prior permission.  Red
++ * Hat makes no representations about the suitability of this software
++ * for any purpose.  It is provided "as is" without express or implied
++ * warranty.
++ *
++ * THE AUTHORS DISCLAIM ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
++ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN
++ * NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY SPECIAL, INDIRECT OR
++ * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
++ * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
++ * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef	_SYNAPTICS_H_
++#define _SYNAPTICS_H_
++
++#include <X11/Xdefs.h>
++
++/******************************************************************************
++ *		Public definitions.
++ *			Used by driver and the shared memory configurator
++ *****************************************************************************/
++
++#define SHM_SYNAPTICS 23947
++typedef struct _SynapticsSHM {
++    int version;                /* Driver version */
++
++    /* Current device state */
++    int x, y;                   /* actual x, y coordinates */
++    int z;                      /* pressure value */
++    int numFingers;             /* number of fingers */
++    int fingerWidth;            /* finger width value */
++    int left, right, up, down;  /* left/right/up/down buttons */
++    Bool multi[8];
++    Bool middle;
++} SynapticsSHM;
++
++/*
++ * Minimum and maximum values for scroll_button_repeat
++ */
++#define SBR_MIN 10
++#define SBR_MAX 1000
++
++#endif                          /* _SYNAPTICS_H_ */
+diff --git a/src/alpscomm.c b/src/alpscomm.c
+index c565636..b7f1e65 100644
+--- a/src/alpscomm.c
++++ b/src/alpscomm.c
+@@ -33,6 +33,7 @@
+ #endif
+ 
+ #include <xorg-server.h>
++#include "synaptics.h"
+ #include "synproto.h"
+ #include "synapticsstr.h"
+ #include "ps2comm.h"
+diff --git a/src/eventcomm.c b/src/eventcomm.c
+index 4850331..a70b515 100644
+--- a/src/eventcomm.c
++++ b/src/eventcomm.c
+@@ -41,6 +41,7 @@
+ #include <stdio.h>
+ #include <time.h>
+ #include "synproto.h"
++#include "synaptics.h"
+ #include "synapticsstr.h"
+ #include <xf86.h>
+ #include <libevdev/libevdev.h>
+@@ -658,9 +659,12 @@ count_fingers(InputInfoPtr pInfo, const struct CommData *comm)
+         fingers = 2;
+     else if (comm->threeFingers)
+         fingers = 3;
+-
++    else if (comm->fourFingers)
++	fingers=4;
++    else if (comm->fiveFingers)
++	fingers=5;
+     if (priv->has_touch && proto_data->num_touches > fingers)
+-        fingers = proto_data->num_touches;
++	fingers = proto_data->num_touches;
+ 
+     return fingers;
+ }
+@@ -761,6 +765,12 @@ EventReadHwState(InputInfoPtr pInfo,
+             case BTN_TOOL_TRIPLETAP:
+                 comm->threeFingers = v;
+                 break;
++            case BTN_TOOL_QUADTAP:
++                comm->fourFingers = v;
++                break;
++            case BTN_TOOL_QUINTTAP:
++		comm->fiveFingers = v;
++		break;
+             case BTN_TOUCH:
+                 if (!priv->has_pressure)
+                     hw->z = v ? para->finger_high + 1 : 0;
+diff --git a/src/properties.c b/src/properties.c
+index c776e6c..51d4b05 100644
+--- a/src/properties.c
++++ b/src/properties.c
+@@ -35,6 +35,7 @@
+ #include <xf86Xinput.h>
+ #include <exevents.h>
+ 
++#include "synaptics.h"
+ #include "synapticsstr.h"
+ #include "synaptics-properties.h"
+ 
+diff --git a/src/ps2comm.c b/src/ps2comm.c
+index c474c07..b639c87 100644
+--- a/src/ps2comm.c
++++ b/src/ps2comm.c
+@@ -38,6 +38,7 @@
+ 
+ #include <xorg-server.h>
+ #include "synproto.h"
++#include "synaptics.h"
+ #include "synapticsstr.h"
+ #include "ps2comm.h"
+ #include <xf86.h>
+diff --git a/src/psmcomm.c b/src/psmcomm.c
+index 4086aba..63c4536 100644
+--- a/src/psmcomm.c
++++ b/src/psmcomm.c
+@@ -44,6 +44,7 @@
+ #include <sys/mouse.h>
+ #include <errno.h>
+ #include <string.h>
++#include "synaptics.h"
+ #include "synproto.h"
+ #include "synapticsstr.h"
+ #include "ps2comm.h"            /* ps2_print_ident() */
+diff --git a/src/synaptics.c b/src/synaptics.c
+index 9807439..05631a2 100644
+--- a/src/synaptics.c
++++ b/src/synaptics.c
+@@ -64,11 +64,12 @@
+ #include <misc.h>
+ #include <xf86.h>
+ #include <math.h>
++#include <sys/shm.h>
+ #include <stdio.h>
+ #include <xf86_OSproc.h>
+ #include <xf86Xinput.h>
+ #include <exevents.h>
+-
++#include "synaptics.h"
+ #include <X11/Xatom.h>
+ #include <X11/extensions/XI2.h>
+ #include <xserver-properties.h>
+@@ -297,6 +298,64 @@ SetDeviceAndProtocol(InputInfoPtr pInfo)
+     return (priv->proto_ops != NULL);
+ }
+ 
++/*
++ * Allocate and initialize read-only memory for the SynapticsParameters data to hold
++ * driver settings.
++ * The function will allocate shared memory if priv->shm_config is TRUE.
++ */
++static Bool
++alloc_shm_data(InputInfoPtr pInfo)
++{
++    int shmid;
++    SynapticsPrivate *priv = pInfo->private;
++
++    if (priv->synshm)
++        return TRUE;            /* Already allocated */
++
++    if (priv->shm_config) {
++        if ((shmid = shmget(SHM_SYNAPTICS, 0, 0)) != -1)
++            shmctl(shmid, IPC_RMID, NULL);
++        if ((shmid = shmget(SHM_SYNAPTICS, sizeof(SynapticsSHM),
++                            0774 | IPC_CREAT)) == -1) {
++            xf86IDrvMsg(pInfo, X_ERROR, "error shmget\n");
++            return FALSE;
++        }
++        if ((priv->synshm = (SynapticsSHM *) shmat(shmid, NULL, 0)) == NULL) {
++            xf86IDrvMsg(pInfo, X_ERROR, "error shmat\n");
++            return FALSE;
++        }
++    }
++    else {
++        priv->synshm = calloc(1, sizeof(SynapticsSHM));
++        if (!priv->synshm)
++            return FALSE;
++    }
++
++    return TRUE;
++}
++
++/*
++ * Free SynapticsParameters data previously allocated by alloc_shm_data().
++ */
++static void
++free_shm_data(SynapticsPrivate * priv)
++{
++    int shmid;
++
++    if (!priv->synshm)
++        return;
++
++    if (priv->shm_config) {
++        if ((shmid = shmget(SHM_SYNAPTICS, 0, 0)) != -1)
++            shmctl(shmid, IPC_RMID, NULL);
++    }
++    else {
++        free(priv->synshm);
++    }
++
++    priv->synshm = NULL;
++}
++
+ static void
+ calculate_edge_widths(SynapticsPrivate * priv, int *l, int *r, int *t, int *b)
+ {
+@@ -579,6 +638,12 @@ set_default_parameters(InputInfoPtr pInfo)
+     int grab_event_device = 0;
+     const char *source;
+ 
++    /* read the parameters */
++    if (priv->synshm)
++        priv->synshm->version =
++            (PACKAGE_VERSION_MAJOR * 10000 + PACKAGE_VERSION_MINOR * 100 +
++             PACKAGE_VERSION_PATCHLEVEL);
++
+     /* The synaptics specs specify typical edge widths of 4% on x, and 5.4% on
+      * y (page 7) [Synaptics TouchPad Interfacing Guide, 510-000080 - A
+      * Second Edition, http://www.synaptics.com/support/dev_support.cfm, 8 Sep
+@@ -916,12 +981,17 @@ SynapticsPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
+     /* read hardware dimensions */
+     ReadDevDimensions(pInfo);
+ 
++    /* install shared memory or normal memory for parameters */
++    priv->shm_config = xf86SetBoolOption(pInfo->options, "SHMConfig", FALSE);
++
+     set_default_parameters(pInfo);
+ 
+ #ifndef NO_DRIVER_SCALING
+     CalculateScalingCoeffs(priv);
+ #endif
+ 
++    if (!alloc_shm_data(pInfo))
++        goto SetupProc_fail;
+ 
+     priv->comm.buffer = XisbNew(pInfo->fd, INPUT_BUFFER_SIZE);
+ 
+@@ -946,6 +1016,7 @@ SynapticsPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
+ 
+     if (priv->comm.buffer)
+         XisbFree(priv->comm.buffer);
++    free_shm_data(priv);
+     free(priv->proto_data);
+     free(priv->timer);
+     free(priv);
+@@ -1126,6 +1197,7 @@ DeviceClose(DeviceIntPtr dev)
+     RetValue = DeviceOff(dev);
+     TimerFree(priv->timer);
+     priv->timer = NULL;
++    free_shm_data(priv);
+     free(priv->touch_axes);
+     priv->touch_axes = NULL;
+     SynapticsHwStateFree(&priv->hwState);
+@@ -1380,6 +1452,9 @@ DeviceInit(DeviceIntPtr dev)
+ 
+     priv->comm.hwState = SynapticsHwStateAlloc(priv);
+ 
++    if (!alloc_shm_data(pInfo))
++        goto fail;
++
+     InitDeviceProperties(pInfo);
+     XIRegisterPropertyHandler(pInfo->dev, SetProperty, NULL, NULL);
+ 
+@@ -1388,6 +1463,7 @@ DeviceInit(DeviceIntPtr dev)
+     return Success;
+ 
+  fail:
++    free_shm_data(priv);
+     free(priv->local_hw_state);
+     free(priv->hwState);
+     free(priv->open_slots);
+@@ -3110,6 +3186,33 @@ reset_hw_state(struct SynapticsHwState *hw)
+     hw->fingerWidth = 0;
+ }
+ 
++/* Update the hardware state in shared memory. This is read-only these days,
++ * nothing in the driver reads back from SHM. SHM configuration is a thing of the past.
++ */
++static void
++update_shm(const InputInfoPtr pInfo, const struct SynapticsHwState *hw)
++{
++    int i;
++    SynapticsPrivate *priv = (SynapticsPrivate *) (pInfo->private);
++    SynapticsSHM *shm = priv->synshm;
++
++    if (!shm)
++        return;
++
++    shm->x = hw->x;
++    shm->y = hw->y;
++    shm->z = hw->z;
++    shm->numFingers = hw->numFingers;
++    shm->fingerWidth = hw->fingerWidth;
++    shm->left = hw->left;
++    shm->right = hw->right;
++    shm->up = hw->up;
++    shm->down = hw->down;
++    for (i = 0; i < 8; i++)
++        shm->multi[i] = hw->multi[i];
++    shm->middle = hw->middle;
++}
++
+ /*
+  * React on changes in the hardware state. This function is called every time
+  * the hardware state changes. The return value is used to specify how many
+@@ -3136,6 +3239,13 @@ HandleState(InputInfoPtr pInfo, struct SynapticsHwState *hw, CARD32 now,
+     Bool inside_active_area;
+     Bool using_cumulative_coords = FALSE;
+     Bool ignore_motion;
++    update_shm(pInfo, hw);
++
++    /* If touchpad is switched off, we skip the whole thing and return delay */
++    if (para->touchpad_off == TOUCHPAD_OFF) {
++        UpdateTouchState(pInfo, hw);
++        return delay;
++    }
+ 
+     /* We need both and x/y, the driver can't handle just one of the two
+      * yet. But since it's possible to hit a phys button on non-clickpads
+diff --git a/src/synapticsstr.h b/src/synapticsstr.h
+index 75f52d5..c8c89cf 100644
+--- a/src/synapticsstr.h
++++ b/src/synapticsstr.h
+@@ -23,6 +23,7 @@
+ #define _SYNAPTICSSTR_H_
+ 
+ #include "synproto.h"
++#include "synaptics.h"
+ 
+ #if GET_ABI_MAJOR(ABI_XINPUT_VERSION) < 18
+ #define LogMessageVerbSigSafe xf86MsgVerb
+@@ -233,6 +234,9 @@ typedef struct _SynapticsParameters {
+ struct _SynapticsPrivateRec {
+     SynapticsParameters synpara;        /* Default parameter settings, read from
+                                            the X config file */
++    SynapticsSHM *synshm;       /* Current parameter settings. Will point to
++                                   shared memory if shm_config is true */
++    Bool shm_config;
+     struct SynapticsProtocolOperations *proto_ops;
+     void *proto_data;           /* protocol-specific data */
+ 
+diff --git a/src/synproto.c b/src/synproto.c
+index 91e20e6..409722e 100644
+--- a/src/synproto.c
++++ b/src/synproto.c
+@@ -23,6 +23,7 @@
+ 
+ #include "synproto.h"
+ #include "synapticsstr.h"
++#include "synaptics.h"
+ 
+ static int
+ HwStateAllocTouch(struct SynapticsHwState *hw, SynapticsPrivate * priv)
+diff --git a/src/synproto.h b/src/synproto.h
+index 6ba6740..8946d67 100644
+--- a/src/synproto.h
++++ b/src/synproto.h
+@@ -95,6 +95,8 @@ struct CommData {
+     Bool oneFinger;
+     Bool twoFingers;
+     Bool threeFingers;
++    Bool fourFingers;
++    Bool fiveFingers;
+ };
+ 
+ struct _SynapticsParameters;
+diff --git a/tools/synclient.c b/tools/synclient.c
+index ac31a66..df1e6a7 100644
+--- a/tools/synclient.c
++++ b/tools/synclient.c
+@@ -32,6 +32,7 @@
+ #include <stdlib.h>
+ #include <sys/types.h>
+ #include <sys/ipc.h>
++#include <sys/shm.h>
+ #include <sys/time.h>
+ #include <unistd.h>
+ #include <string.h>
+@@ -44,6 +45,7 @@
+ #include <X11/extensions/XI.h>
+ #include <X11/extensions/XInput.h>
+ #include "synaptics-properties.h"
++#include "synaptics.h"
+ 
+ #ifndef XATOM_FLOAT
+ #define XATOM_FLOAT "FLOAT"
+@@ -192,6 +194,108 @@ parse_cmd(char *cmd, struct Parameter **par)
+     return 0;
+ }
+ 
++static int
++is_equal(SynapticsSHM * s1, SynapticsSHM * s2)
++{
++    int i;
++
++    if ((s1->x != s2->x) ||
++        (s1->y != s2->y) ||
++        (s1->z != s2->z) ||
++        (s1->numFingers != s2->numFingers) ||
++        (s1->fingerWidth != s2->fingerWidth) ||
++        (s1->left != s2->left) ||
++        (s1->right != s2->right) ||
++        (s1->up != s2->up) ||
++        (s1->down != s2->down) || (s1->middle != s2->middle))
++        return 0;
++
++    for (i = 0; i < 8; i++)
++        if (s1->multi[i] != s2->multi[i])
++            return 0;
++
++    return 1;
++}
++
++static double
++get_time(void)
++{
++    struct timeval tv;
++
++    gettimeofday(&tv, NULL);
++    return tv.tv_sec + tv.tv_usec / 1000000.0;
++}
++
++static void
++shm_monitor(SynapticsSHM * synshm, int delay)
++{
++    int header = 0;
++    SynapticsSHM old;
++    double t0 = get_time();
++
++    memset(&old, 0, sizeof(SynapticsSHM));
++    old.x = -1;                 /* Force first equality test to fail */
++
++    while (1) {
++        SynapticsSHM cur = *synshm;
++
++        if (!is_equal(&old, &cur)) {
++            if (!header) {
++                printf("%8s  %4s %4s %3s %s %2s %2s %s %s %s %s  %8s  "
++                       "%2s %2s %2s %3s %3s\n",
++                       "time", "x", "y", "z", "f", "w", "l", "r", "u", "d", "m",
++                       "multi", "gl", "gm", "gr", "gdx", "gdy");
++                header = 20;
++            }
++            header--;
++            printf
++                ("%8.3f  %4d %4d %3d %d %2d %2d %d %d %d %d  %d%d%d%d%d%d%d%d\n",
++                 get_time() - t0, cur.x, cur.y, cur.z, cur.numFingers,
++                 cur.fingerWidth, cur.left, cur.right, cur.up, cur.down,
++                 cur.middle, cur.multi[0], cur.multi[1], cur.multi[2],
++                 cur.multi[3], cur.multi[4], cur.multi[5], cur.multi[6],
++                 cur.multi[7]);
++            fflush(stdout);
++            old = cur;
++        }
++        usleep(delay * 1000);
++    }
++}
++
++/** Init and return SHM area or NULL on error */
++static SynapticsSHM *
++shm_init()
++{
++    SynapticsSHM *synshm = NULL;
++    int shmid = 0;
++
++    if ((shmid = shmget(SHM_SYNAPTICS, sizeof(SynapticsSHM), 0)) == -1) {
++        if ((shmid = shmget(SHM_SYNAPTICS, 0, 0)) == -1)
++            fprintf(stderr,
++                    "Can't access shared memory area. SHMConfig disabled?\n");
++        else
++            fprintf(stderr,
++                    "Incorrect size of shared memory area. Incompatible driver version?\n");
++    }
++    else if ((synshm = (SynapticsSHM *) shmat(shmid, NULL, SHM_RDONLY)) == NULL)
++        perror("shmat");
++
++    return synshm;
++}
++
++static void
++shm_process_commands(int do_monitor, int delay)
++{
++    SynapticsSHM *synshm = NULL;
++
++    synshm = shm_init();
++    if (!synshm)
++        return;
++
++    if (do_monitor)
++        shm_monitor(synshm, delay);
++}
++
+ /** Init display connection or NULL on error */
+ static Display *
+ dp_init()
+@@ -469,7 +573,11 @@ dp_show_settings(Display * dpy, XDevice * dev)
+ static void
+ usage(void)
+ {
+-    fprintf(stderr, "Usage: synclient [-h] [-l] [-V] [-?] [var1=value1 [var2=value2] ...]\n");
++    fprintf(stderr,
++            "Usage: synclient [-m interval] [-h] [-l] [-V] [-?] [var1=value1 [var2=value2] ...]\n");
++    fprintf(stderr,
++            "  -m monitor changes to the touchpad state (implies -s)\n"
++            "     interval specifies how often (in ms) to poll the touchpad state\n");
+     fprintf(stderr, "  -l List current user settings\n");
+     fprintf(stderr, "  -V Print synclient version string and exit\n");
+     fprintf(stderr, "  -? Show this help message\n");
+@@ -481,7 +589,9 @@ int
+ main(int argc, char *argv[])
+ {
+     int c;
++    int delay = -1;
+     int dump_settings = 0;
++    int do_monitor = 0;
+     int first_cmd;
+ 
+     Display *dpy;
+@@ -491,8 +601,13 @@ main(int argc, char *argv[])
+         dump_settings = 1;
+ 
+     /* Parse command line parameters */
+-    while ((c = getopt(argc, argv, "lV?")) != -1) {
++    while ((c = getopt(argc, argv, "m:lV?")) != -1) {
+         switch (c) {
++        case 'm':
++            do_monitor = 1;
++            if ((delay = atoi(optarg)) < 0)
++                usage();
++            break;
+         case 'l':
+             dump_settings = 1;
+             break;
+@@ -506,9 +621,13 @@ main(int argc, char *argv[])
+     }
+ 
+     first_cmd = optind;
+-    if (!dump_settings && first_cmd == argc)
++    if (!do_monitor && !dump_settings && first_cmd == argc)
+         usage();
+ 
++    /* Connect to the shared memory area */
++    if (do_monitor)
++        shm_process_commands(do_monitor, delay);
++
+     dpy = dp_init();
+     if (!dpy || !(dev = dp_get_device(dpy)))
+         return 1;

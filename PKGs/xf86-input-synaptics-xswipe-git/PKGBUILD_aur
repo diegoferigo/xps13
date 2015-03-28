@@ -1,11 +1,11 @@
-# Mainteiner: dieghen89 <dieghen89 at gmail dot com>
+# Mainteiner: dieghen89
 # Contributor: Jan de Groot <jgc@archlinux.org>
 # Contributor: Tobias Powalowski  <tpowa@archlinux.org>
 # Contributor: Thomas Bächler <thomas@archlinux.org>
 # Contributor: Alexander Baldeck <alexander@archlinux.org>
 
 pkgname=xf86-input-synaptics-xswipe-git
-pkgver=r1472.fc9f490
+pkgver=r1458.f8ae456
 pkgrel=1
 pkgdesc="Synaptics driver for notebook touchpads - Forked branch with -m flag forward ported and 4/5 finger detectable"
 arch=('i686' 'x86_64')
@@ -19,24 +19,26 @@ provides=('synaptics' 'xf86-input-synaptics')
 conflicts=('synaptics' 'xf86-input-synaptics')
 groups=('xorg-drivers' 'xorg')
 backup=('etc/X11/xorg.conf.d/50-synaptics.conf')
-source=("${pkgname}::git://anongit.freedesktop.org/xorg/driver/xf86-input-synaptics"
-		  "to181.patch")
-sha256sums=('SKIP'
-            'bb60fb2cd094b2dadb99a93dc7216d97ed46048eb97c2a85167556904059bbc5')
+source=("${pkgname}::git+https://github.com/dieghen89/xserver-xorg-input-synaptics.git")
+#        add_tapbuttons.diff)
+sha256sums=('SKIP')
+#            '5298d3e871db3768b34cf8516d3f53f9291202e2ea5de3300256e1cd9119a1ec')
 
 pkgver() {
   cd "$srcdir/$pkgname"
+  # Use the tag of the last commit
+  #git describe --long | sed -E 's/([^-]*-g)/r\1/;s/-/./g'
+  #git describe --long --tags | sed -E 's/([^-]*-g)/r\1/;s/-/./g'
+  #git describe --long | sed -E 's/^foo-//;s/([^-]*-g)/r\1/;s/-/./g'
   printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
-prepare() {
-  cd ${srcdir}/${pkgname}
-  git checkout synaptics-1.8-branch
-  patch -Np1 -i ../to181.patch
-}
-
 build() {
-  cd ${srcdir}/${pkgname}  
+  cd ${srcdir}/${pkgname}
+  # * upstream disabled tapping by default if a physical left button is present - see FS#33282
+  # * enable MatchDevicePath directive by default - FS#33291
+  #patch -Np1 -i ${srcdir}/add_tapbuttons.diff
+  
   ./autogen.sh
   ./configure --prefix=/usr
   make
@@ -49,5 +51,6 @@ package() {
   install -m644 conf/50-synaptics.conf "${pkgdir}/etc/X11/xorg.conf.d/"
   install -m755 -d "${pkgdir}/usr/share/licenses/${pkgname}"
   install -m644 COPYING "${pkgdir}/usr/share/licenses/${pkgname}/"
+
   rm -rf "${pkgdir}/usr/share/X11"
 }
