@@ -1,0 +1,16 @@
+# Mainteiner: dieghen89 <dieghen89 at gmail dot com>
+
+pkgname=suspend2hibernate
+pkgver=1
+pkgrel=1
+pkgdesc="Delayed hibernation service file"
+arch=('any')
+url="https://wiki.archlinux.org/index.php/Power_management#Delayed_hibernation_service_file"
+depends=('systemd')
+source=('suspend2hibernate.service')
+install='suspend2hibernate.install'
+md5sums=('36e36ffb0ad0b4b9369ed4c1fdc5e05e')
+
+package() {
+  install -Dm644 suspend2hibernate.service $pkgdir/usr/lib/systemd/system/suspend2hibernate.service
+}

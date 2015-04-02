@@ -1,0 +1,9 @@
+post_install()  {
+  echo ">>> To enable the service:"
+  echo ">>> # systemctl enable suspend2hibernate"
+  echo ""
+  echo ">>> To change the default time (3h) to trigger hibernation,"
+  echo ">>> edit the SLEEPLENGTH variable in the file:"
+  echo ">>> /usr/lib/systemd/system/suspend2hibernate.service"
+  echo ""
+}
